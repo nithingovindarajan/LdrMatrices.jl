@@ -49,7 +49,8 @@ end
 end
 
 @testset "Hankel matrices" begin
-    # TODO
+    s = rand(8)
+
 end
 
 @testset "Toeplitz-plus-Hankel matrices" begin

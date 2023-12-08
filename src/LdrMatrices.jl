@@ -4,7 +4,9 @@ module LdrMatrices
 ###########
 # exports #
 ###########
-export CauchyLike, Ω, GKOalgorithm_LU, GKOalgorithm_solve, Toeplitz, cauchyform, D
+export Ω, D
+export CauchyLike, Toeplitz, Hankel
+export GKOalgorithm_LU, GKOalgorithm_solve, cauchyform
 
 
 ############
@@ -29,19 +31,24 @@ struct CauchyLike{Scalar<:Number} <: AbstractMatrix{Scalar}
     lambda::Vector{Scalar}
     U::Matrix{Scalar}
     V::Matrix{Scalar}
-    n::Int64
-    r::Int64
+    m::Int
+    n::Int
+    r::Int
 
     function CauchyLike{Scalar}(omega, lambda, U, V) where {Scalar<:Number}
-        if size(U) != size(V)
-            throw(DomainError("size(U) != size(S)"))
+        if size(U,2) != size(V,2)
+            throw(DomainError("size(U,2) != size(V,2)"))
         end
-        if length(omega) != size(U, 1)
-            throw(DomainError("length(omega) != size(R, 1)"))
+        if length(omega) != length(lambda)
+            throw(DomainError("length(omega) != length(lambda)"))
         end
-        if length(lambda) != size(V, 1)
-            throw(DomainError("length(lambda) != size(S, 1)"))
+        if size(U,1) != length(omega)
+            throw(DomainError("size(U,1) != length(omega)"))
         end
+        if size(V,1) != length(lambda)
+            throw(DomainError("size(V,1) != length(lambda)"))
+        end
+        m = length(omega)
         n = length(lambda)
         r = size(U, 2)
 
@@ -50,17 +57,18 @@ struct CauchyLike{Scalar<:Number} <: AbstractMatrix{Scalar}
             convert(Vector{Scalar}, lambda),
             convert(Matrix{Scalar}, U),
             convert(Matrix{Scalar}, V),
+            m,
             n,
             r,
         )
     end
 
 end
-Base.:size(A::CauchyLike) = (A.n, A.n)::Tuple{Int64,Int64}
+Base.:size(A::CauchyLike) = (A.m, A.n)
 Base.:getindex(A::CauchyLike, i::Int, j::Int) =
     @views dot(A.V[j, :], A.U[i, :]) / (A.omega[i] - A.lambda[j])
 Base.:Matrix(A::CauchyLike{TC}) where {TC<:Number} =
-    ((A.U * A.V') ./ (A.omega .- transpose(A.lambda)))::Matrix{TC}
+    ((A.U * A.V') ./ (A.omega .- transpose(A.lambda)))
 
 
 #############################################################################
@@ -179,10 +187,13 @@ function GKOalgorithm_solve(
     b::Vector;
     row_pivot = true,
     column_pivot = true,
-    TOL = 1E-15,
-)
+    TOL = 1E-15)
+
+    # check if A is square
+    @assert size(A,1) == size(A,2)
 
     # dimensions
+   
     n = A.n
     r = A.r
 
@@ -279,7 +290,7 @@ function GKOalgorithm_solve(
     return Upper, Π_2, btilde
 end
 
-# #TODO
+# #TODO Cauchy inverse
 # function GKOalgorithm_inverse(A::CauchyLike, row_pivot = true, column_pivot = true)
 #     
 # end
@@ -287,12 +298,18 @@ end
 
 function Base.:\(A::CauchyLike, b::Vector)
 
-    # run GKO algorithm 
-    Upper, Π_2, btilde = GKOalgorithm_solve(A, b)
-    # solve triangular system
-    x = Upper \ btilde
-    # inverse permutation
-    x[Π_2] = x
+    if size(A,1) == size(A,2)
+        # run GKO algorithm 
+        Upper, Π_2, btilde = GKOalgorithm_solve(A, b)
+        # solve triangular system
+        x = Upper \ btilde
+        # inverse permutation
+        x[Π_2] = x
+    elseif size(A,1) > size(A,2)
+        error("overdetermined not yet supported")    
+    else 
+        error("underdetermined not yet supported")   
+    end
 
     return x
 end
@@ -302,28 +319,27 @@ end
 # Toeplitz matrices #
 #####################
 struct Toeplitz{Scalar<:Number} <: AbstractMatrix{Scalar}
-
     coeffs::Vector{Scalar}
+    m::Int
     n::Int
-
-    function Toeplitz{Scalar}(coeffs, n) where {Scalar<:Number}
-        if length(coeffs) == 2 * n - 1
-            new{Scalar}(convert(Vector{Scalar}, coeffs), n)
+    function Toeplitz{Scalar}(coeffs, m, n) where {Scalar<:Number}
+        if length(coeffs) == m + n - 1
+            new{Scalar}(convert(Vector{Scalar}, coeffs),m, n)
         else
             DimensionMismatch()
         end
     end
-
 end
 
 function Toeplitz{Scalar}(coeff_lt::Vector, coeff_ut::Vector) where {Scalar<:Number}
-    n = length(coeff_lt)
+    m = length(coeff_lt)
+    n = length(coeff_ut)+1
     coeffs = [reverse(coeff_ut); coeff_lt]
-    return Toeplitz{Scalar}(convert(Vector{Scalar}, coeffs), n)
+    return Toeplitz{Scalar}(convert(Vector{Scalar}, coeffs), m, n)
 end
-
-Base.:size(A::Toeplitz) = (A.n, A.n)
-Base.:getindex(A::Toeplitz, i::Int, j::Int) = A.coeffs[i-j+A.n]
+Base.:size(A::Toeplitz) = (A.m, A.n)
+Base.:getindex(A::Toeplitz, i::Int, j::Int) = A.coeffs[i-j+A.m]
+# TODO toeplitz addition
 function cauchyform(A::Toeplitz)
     n = A.n
     coeffs = A.coeffs
@@ -339,28 +355,82 @@ end
 
 function Base.:\(A::Toeplitz, b::Vector)
 
-    # Solve Cauchy system
-    Ahat = cauchyform(A)
-    bhat = sqrt(A.n) * ifft(b)
-    xhat = Ahat \ bhat
+    if size(A,1) == size(A,2)
 
-    # retrieve solution of original system
-    x = Diagonal(D(A.n,-1.0+0.0im)) * (1 / sqrt(A.n)) * fft(xhat)
+        # Solve Cauchy system
+        Ahat = cauchyform(A)
+        bhat = sqrt(A.n) * ifft(b)
+        xhat = Ahat \ bhat
+
+        # retrieve solution of original system
+        x = Diagonal(D(A.n,-1.0+0.0im)) * (1 / sqrt(A.n)) * fft(xhat)
+
+    elseif size(A,1) > size(A,2)
+        error("overdetermined not yet supported")    
+    else 
+        error("underdetermined not yet supported")   
+    end
 
     return x
 end
 
 
-# ###################
-# # Hankel matrices #
-# ###################
+###################
+# Hankel matrices #
+###################
+struct Hankel{Scalar<:Number} <: AbstractMatrix{Scalar}
 
+    coeffs::Vector{Scalar}
+    m::Int
+    n::Int
+
+    function Hankel{Scalar}(coeffs, m, n) where {Scalar<:Number}
+        if length(coeffs) == m + n - 1
+            new{Scalar}(convert(Vector{Scalar}, coeffs), n)
+        else
+            DimensionMismatch()
+        end
+    end
+
+end
+function Hankel{Scalar}(coeff_fr::Vector, coeff_lc::Vector) where {Scalar<:Number}
+    m = length(coeff_fr)
+    n = length(coeff_lt)+1
+    coeffs = [coeff_fr; coeff_lc]
+    return Hankel{Scalar}(convert(Vector{Scalar}, coeffs), n)
+end
+Base.:size(A::Hankel) = (A.m, A.n)
+Base.:getindex(A::Hankel, i::Int, j::Int) = A.coeffs[i+j]
+# TODO hankel addition
 
 
 # #################################
 # # Toeplitz-plus-Hankel matrices #
 # #################################
+struct ToeplizPlusHankel{Scalar<:Number} <: AbstractMatrix{Scalar}
 
+    coeffs::Vector{Scalar}
+    m::Int
+    n::Int
+
+    function ToeplizPlusHankel{Scalar}(coeffs, m, n) where {Scalar<:Number}
+        if length(coeffs) == m + n - 1
+            new{Scalar}(convert(Vector{Scalar}, coeffs), n)
+        else
+            DimensionMismatch()
+        end
+    end
+
+end
+function ToeplizPlusHankel{Scalar}(coeff_fr::Vector, coeff_lc::Vector) where {Scalar<:Number}
+    m = length(coeff_fr)
+    n = length(coeff_lt)+1
+    coeffs = [coeff_fr; coeff_lc]
+    return Hankel{Scalar}(convert(Vector{Scalar}, coeffs), n)
+end
+Base.:size(A::Hankel) = (A.m, A.n)
+Base.:getindex(A::Hankel, i::Int, j::Int) = A.coeffs[i+j]
+# TODO toeplitzplushankel addition
 
 
 # ########################
