@@ -1,5 +1,12 @@
 module LdrMatrices
 
+#GOALS:
+# solve overdetermined, underdetermined, and square systems of important ldr matrices
+# fast mat-vecs for important ldr matrices (through e.g. FMM, FFT)
+# add,subtract ldr matrices wherevever possible
+# efficiently compute compact representations of the inverse of important ldr matrices
+# make sure that algorithms or type generic wherever possible: Schur algorithm should work on any field!
+
 
 ###########
 # exports #
@@ -64,6 +71,7 @@ struct CauchyLike{Scalar<:Number} <: AbstractMatrix{Scalar}
     end
 
 end
+# TODO ordinary cauchy constructor
 Base.:size(A::CauchyLike) = (A.m, A.n)
 Base.:getindex(A::CauchyLike, i::Int, j::Int) =
     @views dot(A.V[j, :], A.U[i, :]) / (A.omega[i] - A.lambda[j])
@@ -445,3 +453,4 @@ Base.:getindex(A::Hankel, i::Int, j::Int) = A.coeffs[i+j]
 
 
 end
+git push origin <your_branch_name> --force
