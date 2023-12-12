@@ -1,11 +1,5 @@
 module LdrMatrices
 
-#GOALS:
-# solve overdetermined, underdetermined, and square systems of important ldr matrices
-# fast mat-vecs for important ldr matrices (through e.g. FMM, FFT)
-# add,subtract ldr matrices wherevever possible
-# efficiently compute compact representations of the inverse of important ldr matrices
-# make sure that algorithms or type generic wherever possible: Schur algorithm should work on any field!
 
 
 ###########
