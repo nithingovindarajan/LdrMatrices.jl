@@ -65,7 +65,12 @@ struct CauchyLike{Scalar<:Number} <: AbstractMatrix{Scalar}
 
 end
 function CauchyLike{Scalar}(omega, lambda) where {Scalar<:Number}
-    return CauchyLike{Scalar}(omega, lambda, ones(length(omega), 1), ones(length(lambda), 1))
+    return CauchyLike{Scalar}(
+        omega,
+        lambda,
+        ones(length(omega), 1),
+        ones(length(lambda), 1),
+    )
 end
 Base.:size(A::CauchyLike) = (A.m, A.n)
 Base.:getindex(A::CauchyLike, i::Int, j::Int) =
@@ -151,7 +156,7 @@ function fast_LU_cauchy(A::CauchyLike; row_pivot = true, column_pivot = true, TO
 
         #### Schur update ####
 
-        # TODO: first do givens rotations
+        # TODO: Givens rotations
 
         # compute multiplier
         alphinv = 1 / a[k]
@@ -192,9 +197,6 @@ function fast_ge_cauchy(
     column_pivot = true,
     TOL = 1E-15,
 )
-
-    # check if A is square
-    @assert size(A, 1) == size(A, 2)
 
     # dimensions
     n = A.n
@@ -293,16 +295,14 @@ function fast_ge_cauchy(
     return Upper, Π_2, btilde
 end
 
-# #TODO Cauchy inverse
-# function GKOalgorithm_inverse(A::CauchyLike, row_pivot = true, column_pivot = true)
-#     
-# end
-
+function GKOalgorithm_inverse(A::CauchyLike, row_pivot = true, column_pivot = true)
+    #TODO 
+end
 
 function fast_solve_schur(A::CauchyLike, b::Vector)
 
     if size(A, 1) == size(A, 2)
-        # run GKO algorithm 
+        # triangularize
         Upper, Π_2, btilde = fast_ge_cauchy(A, b)
         # solve triangular system
         x = Upper \ btilde
@@ -341,20 +341,28 @@ function Toeplitz{Scalar}(coeff_lt::Vector, coeff_ut::Vector) where {Scalar<:Num
 end
 Base.:size(A::Toeplitz) = (A.m, A.n)
 Base.:getindex(A::Toeplitz, i::Int, j::Int) = A.coeffs[i-j+A.m]
-# TODO toeplitz addition
-function cauchyform(A::Toeplitz)
-    n = A.n
-    coeffs = A.coeffs
-    U = sqrt(n) * ifft([1 coeffs[n]; zeros(n - 1) coeffs[1:n-1]+coeffs[n+1:end]], 1)
-    V =
-        sqrt(n) * ifft(
-            conj(
-                D(n, -1.0 + 0.0im) .*
-                [coeffs[end:-1:n+1]-coeffs[n-1:-1:1] zeros(n - 1); coeffs[n] 1],
-            ),
-            1,
-        )
-    return CauchyLike{Complex}(Ω(n), Ω(n, -1.0 + 0.0im), U, V)
+function Base.:+(A::Toeplitz, B::Toeplitz)
+    if size(A) != size(B)
+        DimensionMismatch()
+    else
+        coeffs_new = A.coeffs + B.coeffs
+        return Toeplitz{eltype(coeffs_new)}(coeffs_new, size(A, 1), size(A, 2))
+    end
+end
+function ldr_generators_I(A::Toeplitz)
+    U = [1 A.coeffs[A.n]; zeros(A.n - 1) A.coeffs[1:A.n-1]+A.coeffs[A.n+1:end]]
+    V = [A.coeffs[end:-1:A.n+1]-A.coeffs[A.n-1:-1:1] zeros(A.n - 1); A.coeffs[A.n] 1]
+    return U, V
+end
+function ldr_generators_II(A::Toeplitz)
+    #TODO
+end
+function cauchyform_complex(A::Toeplitz)
+    U, V = ldr_generators_I(A)
+    n_sqrt = sqrt(A.n)
+    U = ifft(n_sqrt .* U, 1)
+    V = ifft(n_sqrt .*   conj( D(A.n, -1.0 + 0.0im)  .* V), 1)
+    return CauchyLike{Complex}(Ω(A.n), Ω(A.n, -1.0 + 0.0im), U, V)
 end
 
 function fast_solve_schur(A::Toeplitz, b::Vector)
@@ -362,7 +370,7 @@ function fast_solve_schur(A::Toeplitz, b::Vector)
     if size(A, 1) == size(A, 2)
 
         # Solve Cauchy system
-        Ahat = cauchyform(A)
+        Ahat = cauchyform_complex(A)
         bhat = sqrt(A.n) * ifft(b)
         xhat = Ahat \ bhat
 
@@ -383,29 +391,34 @@ end
 # Hankel matrices #
 ###################
 struct Hankel{Scalar<:Number} <: AbstractMatrix{Scalar}
-
     coeffs::Vector{Scalar}
     m::Int
     n::Int
-
     function Hankel{Scalar}(coeffs, m, n) where {Scalar<:Number}
         if length(coeffs) == m + n - 1
-            new{Scalar}(convert(Vector{Scalar}, coeffs), n)
+            new{Scalar}(convert(Vector{Scalar}, coeffs), m, n)
         else
             DimensionMismatch()
         end
     end
-
 end
 function Hankel{Scalar}(coeff_fr::Vector, coeff_lc::Vector) where {Scalar<:Number}
     m = length(coeff_fr)
-    n = length(coeff_lt) + 1
+    n = length(coeff_lc) + 1
     coeffs = [coeff_fr; coeff_lc]
-    return Hankel{Scalar}(convert(Vector{Scalar}, coeffs), n)
+    return Hankel{Scalar}(convert(Vector{Scalar}, coeffs),m, n)
 end
 Base.:size(A::Hankel) = (A.m, A.n)
-Base.:getindex(A::Hankel, i::Int, j::Int) = A.coeffs[i+j]
-# TODO hankel addition
+Base.:getindex(A::Hankel, i::Int, j::Int) = A.coeffs[i+j-1]
+function Base.:+(A::Hankel, B::Hankel)
+    if size(A) != size(B)
+        DimensionMismatch()
+    else
+        coeffs_new = A.coeffs + B.coeffs
+        return Hankel{eltype(coeffs_new)}(coeffs_new, size(A, 1), size(A, 2))
+    end
+end
+
 
 
 #################################
