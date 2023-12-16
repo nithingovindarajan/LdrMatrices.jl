@@ -4,8 +4,8 @@ module LdrMatrices
 ###########
 # exports #
 ###########
-export Ω, D
-export CauchyLike, Toeplitz, Hankel
+export Ω, D, Ξ, Κ
+export CauchyLike, Toeplitz, Hankel, ToeplitzPlusHankel
 export fast_LU_cauchy, fast_ge_cauchy, fast_solve_schur
 
 
@@ -21,6 +21,8 @@ using FFTW
 D(n, φ::Complex) = [φ^(-(k - 1) / n) for k = 1:n]
 Ω(n) = [exp(π * 2im * (k - 1) / n) for k = 1:n]
 Ω(n, φ) = φ^(1 / n) * Ω(n)
+Ξ(n) = [2* cos((k*π)/(n+1))  for k = 1:n]
+Κ(n) = [2* cos((k*π)/(n)) for k = 0:n-1]
 
 
 ########################
@@ -333,11 +335,11 @@ struct Toeplitz{Scalar<:Number} <: AbstractMatrix{Scalar}
         end
     end
 end
-function Toeplitz{Scalar}(coeff_lt::Vector, coeff_ut::Vector) where {Scalar<:Number}
-    m = length(coeff_lt)
-    n = length(coeff_ut) + 1
-    coeffs = [reverse(coeff_ut); coeff_lt]
-    return Toeplitz{Scalar}(convert(Vector{Scalar}, coeffs), m, n)
+function Toeplitz{Scalar}(coeff_fc::Vector, coeff_fr::Vector) where {Scalar<:Number}
+    m = length(coeff_fc)
+    n = length(coeff_fr) + 1
+    coeffs = [reverse(coeff_fr); coeff_fc]
+    return Toeplitz{Scalar}(coeffs, m, n)
 end
 Base.:size(A::Toeplitz) = (A.m, A.n)
 Base.:getindex(A::Toeplitz, i::Int, j::Int) = A.coeffs[i-j+A.m]
@@ -361,7 +363,7 @@ function cauchyform_complex(A::Toeplitz)
     U, V = ldr_generators_I(A)
     n_sqrt = sqrt(A.n)
     U = ifft(n_sqrt .* U, 1)
-    V = ifft(n_sqrt .*   conj( D(A.n, -1.0 + 0.0im)  .* V), 1)
+    V = ifft(n_sqrt .* conj(D(A.n, -1.0 + 0.0im) .* V), 1)
     return CauchyLike{Complex}(Ω(A.n), Ω(A.n, -1.0 + 0.0im), U, V)
 end
 
@@ -406,7 +408,7 @@ function Hankel{Scalar}(coeff_fr::Vector, coeff_lc::Vector) where {Scalar<:Numbe
     m = length(coeff_fr)
     n = length(coeff_lc) + 1
     coeffs = [coeff_fr; coeff_lc]
-    return Hankel{Scalar}(convert(Vector{Scalar}, coeffs),m, n)
+    return Hankel{Scalar}(coeffs, m, n)
 end
 Base.:size(A::Hankel) = (A.m, A.n)
 Base.:getindex(A::Hankel, i::Int, j::Int) = A.coeffs[i+j-1]
@@ -424,34 +426,62 @@ end
 #################################
 # Toeplitz-plus-Hankel matrices #
 #################################
-struct ToeplizPlusHankel{Scalar<:Number} <: AbstractMatrix{Scalar}
-
-    coeffs::Vector{Scalar}
+struct ToeplitzPlusHankel{Scalar<:Number} <: AbstractMatrix{Scalar}
+    coeffs_toeplitz::Vector{Scalar}
+    coeffs_hankel::Vector{Scalar}
     m::Int
     n::Int
-    function ToeplizPlusHankel{Scalar}(coeffs, m, n) where {Scalar<:Number}
-        if length(coeffs) == m + n - 1
-            new{Scalar}(convert(Vector{Scalar}, coeffs), n)
+    function ToeplitzPlusHankel{Scalar}(
+        coeffs_toeplitz,
+        coeffs_hankel,
+        m,
+        n,
+    ) where {Scalar<:Number}
+        if length(coeffs_toeplitz) == length(coeffs_hankel) == m + n - 1
+            new{Scalar}(
+                convert(Vector{Scalar}, coeffs_toeplitz),
+                convert(Vector{Scalar}, coeffs_hankel),
+                m,
+                n,
+            )
         else
             DimensionMismatch()
         end
     end
 
 end
-function ToeplizPlusHankel{Scalar}(
-    coeff_fr::Vector,
-    coeff_lc::Vector,
+function ToeplitzPlusHankel{Scalar}(
+    coeff_toeplitz_fc::Vector,
+    coeff_toeplitz_fr::Vector,
+    coeff_hankel_fr::Vector,
+    coeff_hankel_lc::Vector,
 ) where {Scalar<:Number}
-    m = length(coeff_fr)
-    n = length(coeff_lt) + 1
-    coeffs = [coeff_fr; coeff_lc]
-    return Hankel{Scalar}(convert(Vector{Scalar}, coeffs), n)
+    m = length(coeff_toeplitz_fc)
+    n = length(coeff_toeplitz_fr) + 1
+    coeffs_toeplitz = [reverse(coeff_toeplitz_fr); coeff_toeplitz_fc]
+    coeffs_hankel = [coeff_hankel_fr; coeff_hankel_lc]
+    return ToeplitzPlusHankel{Scalar}(coeffs_toeplitz, coeffs_hankel, m, n)
 end
-Base.:size(A::ToeplizPlusHankel) = (A.m, A.n)
-Base.:getindex(A::ToeplizPlusHankel, i::Int, j::Int) = A.coeffs[i+j]
-# TODO toeplitzplushankel addition
-
-
+Base.:size(A::ToeplitzPlusHankel) = (A.m, A.n)
+Base.:getindex(A::ToeplitzPlusHankel, i::Int, j::Int) =
+    A.coeffs_hankel[i+j-1] + A.coeffs_toeplitz[i-j+A.m]
+function Base.:+(A::Toeplitz, B::Hankel)
+    if size(A) != size(B)
+        DimensionMismatch()
+    else
+        elem_type = typeof(A[1, 1] + B[1, 1])
+        return ToeplitzPlusHankel{elem_type}(A.coeffs, B.coeffs, size(A, 1), size(A, 2))
+    end
+end
+function Base.:+(A::Hankel, B::Toeplitz)
+    if size(A) != size(B)
+        DimensionMismatch()
+    else
+        elem_type = typeof(A[1, 1] + B[1, 1])
+        return ToeplitzPlusHankel{elem_type}(B.coeffs, A.coeffs, size(A, 1), size(A, 2))
+    end
+end
+# TODO more toeplitzplushankel additions
 
 
 end

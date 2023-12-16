@@ -5,13 +5,28 @@
 using LdrMatrices
 using Test
 using LinearAlgebra  
-
-
+using FFTW
+    
 # auxiliary functions for testing
-DFT(n) = (1 / sqrt(n)) * [exp(-π * (i - 1) * (j - 1) * 2im / n) for i = 1:n, j = 1:n]
+DFT(n) = (1 / sqrt(n)) .* [exp(-π * (i - 1) * (j - 1) * 2im / n) for i = 1:n, j = 1:n]
 DFT(n, φ) = Diagonal(D(n, φ)) * DFT(n)
+DST_I(n) = sqrt(2/(n+1))  * [sin((k*j*π)/(n+1)) for k = 1:n, j = 1:n]
+function DCT_II(n)
+    A = sqrt(2/n)  * [cos(((2*k-1)*(j-1)*π)/(2*n)) for k = 1:n, j=1:n]
+    sqrt_2 = sqrt(2)
+    A[:,1] = A[:,1] ./ sqrt_2 
+    return A
+end 
+
 
 @testset "auxiliary tests" begin
+    # relation trigonemetric transforms and FFTW code
+    n = 10
+    @test DFT(n) ≈ 1/sqrt(n)*fft(Matrix(I,n,n),1)
+    #@test DST_I(n) ≈ bfft(Matrix(I,n,n),1) ???
+    @test DCT_II(n) ≈ idct(Matrix(I,n,n),1)
+    
+    # eigendecomposition fo Z_phi
     φ = rand(ComplexF64); φ = φ / abs(φ)
     Z_φ = [
         0 0 0 φ
@@ -20,8 +35,28 @@ DFT(n, φ) = Diagonal(D(n, φ)) * DFT(n)
         0 0 1 0
     ]
     V = Diagonal(D(4, φ)) * DFT(4)
-    Lambda = Diagonal(Ω(4, φ))
-    @test Z_φ ≈ V * Lambda * V'
+    Λ = Diagonal(Ω(4, φ))
+    @test Z_φ ≈ V * Λ * V'
+        
+    # eigendecomposition of Y_00
+    Y_00 = [0 1 0 0 0
+            1 0 1 0 0
+            0 1 0 1 0
+            0 0 1 0 1
+            0 0 0 1 0]
+    V = DST_I(5)
+    Λ = Diagonal(Ξ(5))
+    @test Y_00 ≈ V * Λ * V'
+   
+    # eigendecomposition of Y_11       
+    Y_11 = [1 1 0 0 0
+            1 0 1 0 0
+            0 1 0 1 0
+            0 0 1 0 1
+            0 0 0 1 1]
+    V = DCT_II(5)
+    Λ = Diagonal(Κ(5))
+    @test Y_11 ≈ V * Λ * V'    
 end
 
 @testset "construct Cauchy-like matrices" begin
@@ -96,5 +131,33 @@ end
 end
 
 @testset "Toeplitz-plus-Hankel matrices" begin
-    # TODO
+    
+    # Toeplitz part
+    u = rand(4)
+    v = rand(3)
+    
+    Tdense = [
+        u[1] v[1] v[2] v[3]
+        u[2] u[1] v[1] v[2]
+        u[3] u[2] u[1] v[1]
+        u[4] u[3] u[2] u[1]
+    ]
+    T = Toeplitz{ComplexF64}(u, v)
+
+    # hankel part
+    h1 = rand(ComplexF64, 4)
+    h2 = rand(ComplexF64, 3)
+    h = [h1;h2]
+    Hdense = [h[1] h[2] h[3] h[4]
+              h[2] h[3] h[4] h[5]
+              h[3] h[4] h[5] h[6]
+              h[4] h[5] h[6] h[7]]
+    H = Hankel{ComplexF64}(h,4,4)
+
+    #
+    TplusH = ToeplitzPlusHankel{ComplexF64}(u,v,h1,h2)
+    @test TplusH  == Tdense + Hdense
+    @test typeof(T+H) == typeof(H+T) == typeof(TplusH)
+    @test H+T == T+H == TplusH 
+
 end
