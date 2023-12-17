@@ -110,7 +110,7 @@ end
     omega, lambda = Ω(n, 1), Ω(n, -1 + 0im)
     U, V = rand(n, 2), rand(n, 2)
     Acauchylike = CauchyLike{ComplexF64}(omega, lambda, U, V)
-    Π_1, Π_2, L, U = fast_LU_cauchy(Acauchylike, row_pivot = true, column_pivot = true)
+    Π_1, Π_2, L, U = fast_ge_LU(Acauchylike, row_pivot = true, column_pivot = true)
     @test Acauchylike[Π_1, Π_2] ≈ L * U
 end
 
@@ -120,7 +120,7 @@ end
     U, V = rand(n, 2), rand(n, 2)
     Acauchylike = CauchyLike{ComplexF64}(omega, lambda, U, V)
     b = rand(ComplexF64, n)
-    x = Acauchylike \ b
+    x = fast_ge_solve(Acauchylike,b)
     x_ref = Matrix(Acauchylike) \ b
     @test x ≈ x_ref
 end
@@ -160,7 +160,7 @@ end
     u = rand(4)
     v = rand(3)
     T = Toeplitz{ComplexF64}(u, v)
-    @test (Matrix(T) \ b) ≈ T \ b
+    @test (Matrix(T) \ b) ≈ fast_ge_solve(T, b)
 end
 
 @testset "Hankel matrices" begin
@@ -178,7 +178,7 @@ end
     H = Hankel{ComplexF64}(h, 5, 4)
     @test H == Hdense
     @test H == Hankel{ComplexF64}(h1, h2)
-    φ = -1 #rand(ComplexF64); φ = φ / abs(φ)
+    φ = rand(ComplexF64); φ = φ / abs(φ)
     Z = [
         0 0 0 0 1
         1 0 0 0 0
@@ -193,7 +193,14 @@ end
         0 0 1 0
     ]
     U, V = LdrMatrices.ldr_generators_hankel_I(H; φ = φ)
-    @test Z' * H - H * Z_φ ≈ U * V'    
+    @test Z' * H - H * Z_φ ≈ U * V'
+    @test LdrMatrices.cauchyform_hankel_complex(H; φ = φ) ≈ DFT(5)' * Hdense * DFT(4, φ) 
+    
+    #solver
+    u = rand(4)
+    v = rand(3)
+    H = Hankel{ComplexF64}(u, v)
+    @test (Matrix(H) \ b) ≈ fast_ge_solve(H, b)
 end
 
 @testset "Toeplitz-plus-Hankel matrices" begin
@@ -201,7 +208,6 @@ end
     # Toeplitz part
     u = rand(4)
     v = rand(3)
-
     Tdense = [
         u[1] v[1] v[2] v[3]
         u[2] u[1] v[1] v[2]

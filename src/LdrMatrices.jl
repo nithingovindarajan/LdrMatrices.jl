@@ -6,7 +6,7 @@ module LdrMatrices
 ###########
 export Ω, D, Ξ, Κ
 export CauchyLike, Toeplitz, Hankel, ToeplitzPlusHankel
-export fast_LU_cauchy, fast_ge_cauchy, fast_solve_schur
+export fast_ge_LU, fast_ge_triangularize, fast_ge_inverse, fast_ge_solve
 
 
 ############
@@ -18,7 +18,7 @@ using FFTW
 ###############
 # DEFINITIONS #
 ###############
-D(n, φ::Complex) = [φ^(-(k - 1) / n) for k = 1:n]
+D(n, φ) = [φ^(-(k - 1) / n) for k = 1:n]
 Ω(n) = [exp(π * 2im * (k - 1) / n) for k = 1:n]
 Ω(n, φ) = φ^(1 / n) * Ω(n)
 Ξ(n) = [2 * cos((k * π) / (n + 1)) for k = 1:n]
@@ -89,8 +89,8 @@ function normalize(U, V)
     return Unorm, Vnorm
 end
 
-
-function fast_LU_cauchy(A::CauchyLike; row_pivot = true, column_pivot = true, TOL = 1E-15)
+#TODO allow for nonsquare
+function fast_ge_LU(A::CauchyLike; row_pivot = true, column_pivot = true, TOL = 1E-15)
 
     # dimensions
     n = A.n
@@ -189,13 +189,18 @@ function fast_LU_cauchy(A::CauchyLike; row_pivot = true, column_pivot = true, TO
 
 end
 
-function fast_ge_cauchy(
+
+function fast_ge_triangularize(
     A::CauchyLike,
     b::Vector;
     row_pivot = true,
     column_pivot = true,
     TOL = 1E-15,
 )
+    # check if system is square
+    if size(A, 1) != size(A, 2)
+        error("overdetermined not yet supported")
+    end
 
     # dimensions
     n = A.n
@@ -294,15 +299,15 @@ function fast_ge_cauchy(
     return Upper, Π_2, btilde
 end
 
-function GKOalgorithm_inverse(A::CauchyLike, row_pivot = true, column_pivot = true)
+function fast_ge_inverse(A::CauchyLike, row_pivot = true, column_pivot = true)
     #TODO 
 end
 
-function fast_solve_schur(A::CauchyLike, b::Vector)
+function fast_ge_solve(A::CauchyLike, b::Vector)
 
     if size(A, 1) == size(A, 2)
         # triangularize
-        Upper, Π_2, btilde = fast_ge_cauchy(A, b)
+        Upper, Π_2, btilde = fast_ge_triangularize(A, b)
         # solve triangular system
         x = Upper \ btilde
         # inverse permutation
@@ -363,23 +368,19 @@ end
 function ldr_generators_toeplitz_II(A::Toeplitz)
     #TODO
 end
-function cauchyform_toeplitz_complex(A::Toeplitz; φ = -1)
+function cauchyform_toeplitz_complex(A::Toeplitz; φ = -1.0+0.0im)
     U, V = ldr_generators_toeplitz_I(A; φ=φ)
-    Uhat = sqrt(A.m) .* ifft(U, 1)
-    Vhat = sqrt(A.n) .* ifft(Diagonal(D(A.n,φ))' * V, 1)
-    U = ifft(sqrt(A.m) .* U, 1)
-    V = ifft(sqrt(A.n) .* Diagonal(D(A.n,φ))' * V, 1)
-    return CauchyLike{Complex}(Ω(A.m), Ω(A.n,φ), Uhat, Vhat)
+    U = sqrt(A.m) .* ifft(U, 1)
+    V = sqrt(A.n) .* ifft(Diagonal(D(A.n,φ))' * V, 1)
+    return CauchyLike{Complex}(Ω(A.m), Ω(A.n,φ), U, V)
 end
-
-function fast_solve_schur(A::Toeplitz, b::Vector)
+function fast_ge_solve(A::Toeplitz, b::Vector)
 
     if size(A, 1) == size(A, 2)
-
         # Solve Cauchy system
         Ahat = cauchyform_toeplitz_complex(A)
         bhat = sqrt(A.n) * ifft(b)
-        xhat = Ahat \ bhat
+        xhat = fast_ge_solve(Ahat, bhat)
 
         # retrieve solution of original system
         x = Diagonal(D(A.n, -1.0 + 0.0im)) * (1 / sqrt(A.n)) * fft(xhat)
@@ -440,14 +441,31 @@ end
 function ldr_generators_hankel_II(A::Hankel)
     #TODO
 end
-function cauchyform_hankel_complex(A::Hankel; φ = -1)
+function cauchyform_hankel_complex(A::Hankel; φ = -1.0+0.0im)
     U, V = ldr_generators_hankel_I(A; φ=φ)
-    Uhat = sqrt(A.m) .* fft(U, 1)
+    Uhat = sqrt(A.m) .* ifft(U, 1)
     Vhat = sqrt(A.n) .* ifft(Diagonal(D(A.n,φ))' * V, 1)
-    U = ifft(sqrt(A.m) .* U, 1)
-    V = ifft(sqrt(A.n) .* Diagonal(D(A.n,φ))' * V, 1)
-    return CauchyLike{Complex}(Ω(A.m), Ω(A.n,φ), Uhat, Vhat)
+    return CauchyLike{Complex}(conj(Ω(A.m)), Ω(A.n,φ), Uhat, Vhat)
 end
+function fast_ge_solve(A::Hankel, b::Vector)
+    if size(A, 1) == size(A, 2)
+        # Solve Cauchy system
+        Ahat = cauchyform_hankel_complex(A)
+        bhat = sqrt(A.n) * ifft(b)
+        xhat = fast_ge_solve(Ahat, bhat)
+
+        # retrieve solution of original system
+        x = Diagonal(D(A.n, -1.0 + 0.0im)) * (1 / sqrt(A.n)) * fft(xhat)
+
+    elseif size(A, 1) > size(A, 2)
+        error("overdetermined not yet supported")
+    else
+        error("underdetermined not yet supported")
+    end
+    return x
+end
+
+
 
 #################################
 # Toeplitz-plus-Hankel matrices #
