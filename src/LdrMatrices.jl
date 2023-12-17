@@ -21,8 +21,8 @@ using FFTW
 D(n, φ::Complex) = [φ^(-(k - 1) / n) for k = 1:n]
 Ω(n) = [exp(π * 2im * (k - 1) / n) for k = 1:n]
 Ω(n, φ) = φ^(1 / n) * Ω(n)
-Ξ(n) = [2* cos((k*π)/(n+1))  for k = 1:n]
-Κ(n) = [2* cos((k*π)/(n)) for k = 0:n-1]
+Ξ(n) = [2 * cos((k * π) / (n + 1)) for k = 1:n]
+Κ(n) = [2 * cos((k * π) / (n)) for k = 0:n-1]
 
 
 ########################
@@ -40,9 +40,6 @@ struct CauchyLike{Scalar<:Number} <: AbstractMatrix{Scalar}
     function CauchyLike{Scalar}(omega, lambda, U, V) where {Scalar<:Number}
         if size(U, 2) != size(V, 2)
             throw(DomainError("size(U,2) != size(V,2)"))
-        end
-        if length(omega) != length(lambda)
-            throw(DomainError("length(omega) != length(lambda)"))
         end
         if size(U, 1) != length(omega)
             throw(DomainError("size(U,1) != length(omega)"))
@@ -342,7 +339,7 @@ function Toeplitz{Scalar}(coeff_fc::Vector, coeff_fr::Vector) where {Scalar<:Num
     return Toeplitz{Scalar}(coeffs, m, n)
 end
 Base.:size(A::Toeplitz) = (A.m, A.n)
-Base.:getindex(A::Toeplitz, i::Int, j::Int) = A.coeffs[i-j+A.m]
+Base.:getindex(A::Toeplitz, i::Int, j::Int) = A.coeffs[i-j+A.n]
 function Base.:+(A::Toeplitz, B::Toeplitz)
     if size(A) != size(B)
         DimensionMismatch()
@@ -351,20 +348,28 @@ function Base.:+(A::Toeplitz, B::Toeplitz)
         return Toeplitz{eltype(coeffs_new)}(coeffs_new, size(A, 1), size(A, 2))
     end
 end
-function ldr_generators_I(A::Toeplitz)
-    U = [1 A.coeffs[A.n]; zeros(A.n - 1) A.coeffs[1:A.n-1]+A.coeffs[A.n+1:end]]
-    V = [A.coeffs[end:-1:A.n+1]-A.coeffs[A.n-1:-1:1] zeros(A.n - 1); A.coeffs[A.n] 1]
+function ldr_generators_toeplitz_I(A::Toeplitz; φ=-1)
+    # associated with lrd eq: Z * A -  A * Z_φ = UV'
+    U = [
+        1 A.coeffs[A.m]
+        zeros(A.m - 1) A.coeffs[1:A.m-1]-φ*A.coeffs[A.n+1:end]
+    ]
+    V = [
+        conj(A.coeffs[end:-1:A.m+1] - A.coeffs[A.n-1:-1:1]) zeros(A.n - 1)
+        conj(-φ*A.coeffs[A.n]) 1
+    ]
     return U, V
 end
-function ldr_generators_II(A::Toeplitz)
+function ldr_generators_toeplitz_II(A::Toeplitz)
     #TODO
 end
-function cauchyform_complex(A::Toeplitz)
-    U, V = ldr_generators_I(A)
-    n_sqrt = sqrt(A.n)
-    U = ifft(n_sqrt .* U, 1)
-    V = ifft(n_sqrt .* conj(D(A.n, -1.0 + 0.0im) .* V), 1)
-    return CauchyLike{Complex}(Ω(A.n), Ω(A.n, -1.0 + 0.0im), U, V)
+function cauchyform_toeplitz_complex(A::Toeplitz; φ = -1)
+    U, V = ldr_generators_toeplitz_I(A; φ=φ)
+    Uhat = sqrt(A.m) .* ifft(U, 1)
+    Vhat = sqrt(A.n) .* ifft(Diagonal(D(A.n,φ))' * V, 1)
+    U = ifft(sqrt(A.m) .* U, 1)
+    V = ifft(sqrt(A.n) .* Diagonal(D(A.n,φ))' * V, 1)
+    return CauchyLike{Complex}(Ω(A.m), Ω(A.n,φ), Uhat, Vhat)
 end
 
 function fast_solve_schur(A::Toeplitz, b::Vector)
@@ -372,7 +377,7 @@ function fast_solve_schur(A::Toeplitz, b::Vector)
     if size(A, 1) == size(A, 2)
 
         # Solve Cauchy system
-        Ahat = cauchyform_complex(A)
+        Ahat = cauchyform_toeplitz_complex(A)
         bhat = sqrt(A.n) * ifft(b)
         xhat = Ahat \ bhat
 
@@ -420,8 +425,29 @@ function Base.:+(A::Hankel, B::Hankel)
         return Hankel{eltype(coeffs_new)}(coeffs_new, size(A, 1), size(A, 2))
     end
 end
-
-
+function ldr_generators_hankel_I(A::Hankel; φ = -1)
+    # associated with lrd eq: Z' * A -  A * Z_φ = UV'
+    U = [
+        A.coeffs[A.n+1:end]-φ*A.coeffs[1:A.m-1] zeros(A.m - 1)
+        -φ*A.coeffs[A.m] 1
+    ]
+    V = [
+        zeros(A.n - 1) conj(A.coeffs[1:A.n-1] - A.coeffs[A.m+1:end])
+        1 conj(A.coeffs[A.n])
+    ]
+    return U, V
+end
+function ldr_generators_hankel_II(A::Hankel)
+    #TODO
+end
+function cauchyform_hankel_complex(A::Hankel; φ = -1)
+    U, V = ldr_generators_hankel_I(A; φ=φ)
+    Uhat = sqrt(A.m) .* fft(U, 1)
+    Vhat = sqrt(A.n) .* ifft(Diagonal(D(A.n,φ))' * V, 1)
+    U = ifft(sqrt(A.m) .* U, 1)
+    V = ifft(sqrt(A.n) .* Diagonal(D(A.n,φ))' * V, 1)
+    return CauchyLike{Complex}(Ω(A.m), Ω(A.n,φ), Uhat, Vhat)
+end
 
 #################################
 # Toeplitz-plus-Hankel matrices #
