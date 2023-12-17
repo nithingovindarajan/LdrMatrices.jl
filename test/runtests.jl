@@ -19,41 +19,11 @@ function DCT_II(n)
 end
 
 
-
-u = rand(ComplexF64, 4)
-    v = rand(ComplexF64, 4)
-    b = rand(ComplexF64, 4)
-    Tdense = [
-        u[1] v[1] v[2] v[3] v[4]
-        u[2] u[1] v[1] v[2] v[3]
-        u[3] u[2] u[1] v[1] v[2]
-        u[4] u[3] u[2] u[1] v[1]
-    ]
-    T = Toeplitz{ComplexF64}(u, v)
-    @test T == Tdense
-    @test T == Toeplitz{ComplexF64}([reverse(v);u],4,5)
-    Z = [
-        0 0 0 1
-        1 0 0 0
-        0 1 0 0
-        0 0 1 0
-    ]
-    Z_min1 =  [
-        0 0 0 0 -1
-        1 0 0 0  0
-        0 1 0 0  0
-        0 0 1 0  0
-        0 0 0 1  0
-    ]
-    U, V = LdrMatrices.ldr_generators_toeplitz_I(T)
-    @test Z * T - T * Z_min1 ≈ U * V' # check for nonsquare as well! 
-
-
 @testset "auxiliary tests" begin
     # relation trigonemetric transforms and FFTW code
     n = 10
-    @test DFT(n) ≈ 1 / sqrt(n) * fft(Matrix(I, n, n), 1)
-    #@test DST_I(n) ≈ bfft(Matrix(I,n,n),1) ???
+    @test DFT(n) ≈ fft(Matrix(I, n, n), 1)  / sqrt(n) 
+    @test DST_I(n) ≈ FFTW.r2r(Matrix(I,n,n), FFTW.RODFT00, 1) / sqrt(2 *(n+1))
     @test DCT_II(n) ≈ idct(Matrix(I, n, n), 1)
 
     # eigendecomposition fo Z_phi

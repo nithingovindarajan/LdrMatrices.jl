@@ -383,8 +383,7 @@ function fast_ge_solve(A::Toeplitz, b::Vector)
         xhat = fast_ge_solve(Ahat, bhat)
 
         # retrieve solution of original system
-        x = Diagonal(D(A.n, -1.0 + 0.0im)) * (1 / sqrt(A.n)) * fft(xhat)
-
+        x = Diagonal(D(A.n, -1.0 + 0.0im)) * fft(xhat) / sqrt(A.n)
     elseif size(A, 1) > size(A, 2)
         error("overdetermined not yet supported")
     else
@@ -455,7 +454,7 @@ function fast_ge_solve(A::Hankel, b::Vector)
         xhat = fast_ge_solve(Ahat, bhat)
 
         # retrieve solution of original system
-        x = Diagonal(D(A.n, -1.0 + 0.0im)) * (1 / sqrt(A.n)) * fft(xhat)
+        x = Diagonal(D(A.n, -1.0 + 0.0im)) * fft(xhat) / sqrt(A.n)
 
     elseif size(A, 1) > size(A, 2)
         error("overdetermined not yet supported")
