@@ -366,7 +366,30 @@ function ldr_generators_toeplitz_I(A::Toeplitz; φ=-1)
     return U, V
 end
 function ldr_generators_toeplitz_II(A::Toeplitz)
-    #TODO
+    # associated with lrd eq: Y00 * A -  A * Y11 = UV'
+    # U
+    u1 = [1
+        zeros(A.m-1)]
+    u2 = [zeros(A.m-1)
+        1]
+    u3 = [-A.coeffs[1]
+        A.coeffs[1:A.n-2]-A.coeffs[2:A.n-1]
+        ]
+    u4 = [A.coeffs[A.n+1:end]-A.coeffs[A.n:end-1]
+        -A.coeffs[end]] 
+    U = [u1 u2 u3 u4]      
+    # V    
+    v1 = [-conj(A.coeffs[A.n-1:-1:1])
+        0]
+    v2 = [0;
+        - conj(A.coeffs[end:-1:A.n])]
+    v3 = [zeros(A.n-1)
+        1]
+    v4 = [1
+        zeros(A.n-1)]                
+    V =  [v1 v2 v3 v4] 
+    
+    return U, V
 end
 function cauchyform_toeplitz_complex(A::Toeplitz; φ = -1.0+0.0im)
     U, V = ldr_generators_toeplitz_I(A; φ=φ)

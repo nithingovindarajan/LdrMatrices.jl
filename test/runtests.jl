@@ -18,6 +18,41 @@ function DCT_II(n)
     return A
 end
 
+# m = 4
+# n = 5
+
+# h1 = rand(ComplexF64)
+# h2 = rand(ComplexF64)
+# h3 = rand(ComplexF64)
+# h4 = rand(ComplexF64)
+# h5 = rand(ComplexF64)
+# h6 = rand(ComplexF64)
+# h7 = rand(ComplexF64)
+# h8 = rand(ComplexF64)
+
+# h = [h1;h2;h3;h4;h5;h6;h7;h8]
+# H = Hankel{ComplexF64}(h,m,n)
+
+# Y_00 = [
+#         0 1 0 0
+#         1 0 1 0
+#         0 1 0 1
+#         0 0 1 0
+#     ]      
+# Y_11 = [
+#         1 1 0 0 0
+#         1 0 1 0 0
+#         0 1 0 1 0
+#         0 0 1 0 1
+#         0 0 0 1 1
+#     ]
+
+
+                  
+
+# Y_00 * H - H * Y_11 ≈ U*V'
+
+
 
 @testset "auxiliary tests" begin
     # relation trigonemetric transforms and FFTW code
@@ -98,7 +133,6 @@ end
 @testset "Toeplitz matrices" begin
     u = rand(ComplexF64, 4)
     v = rand(ComplexF64, 4)
-    b = rand(ComplexF64, 4)
     Tdense = [
         u[1] v[1] v[2] v[3] v[4]
         u[2] u[1] v[1] v[2] v[3]
@@ -125,10 +159,26 @@ end
     U, V = LdrMatrices.ldr_generators_toeplitz_I(T; φ = φ)
     @test Z * T - T * Z_φ ≈ U * V' # check for nonsquare as well! 
     @test LdrMatrices.cauchyform_toeplitz_complex(T; φ = φ) ≈ DFT(4)' * Tdense * DFT(5, φ)
-    
+    Y_00 = [
+        0 1 0 0
+        1 0 1 0
+        0 1 0 1
+        0 0 1 0
+    ]      
+    Y_11 = [
+        1 1 0 0 0
+        1 0 1 0 0
+        0 1 0 1 0
+        0 0 1 0 1
+        0 0 0 1 1
+    ]
+    U, V = LdrMatrices.ldr_generators_toeplitz_II(T)
+    @test Y_00 * T - T * Y_11 ≈ U*V'
+
     #solver
     u = rand(4)
     v = rand(3)
+    b = rand(ComplexF64, 4)
     T = Toeplitz{ComplexF64}(u, v)
     @test (Matrix(T) \ b) ≈ fast_ge_solve(T, b)
 end
