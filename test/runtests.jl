@@ -18,41 +18,6 @@ function DCT_II(n)
     return A
 end
 
-# m = 4
-# n = 5
-
-# h1 = rand(ComplexF64)
-# h2 = rand(ComplexF64)
-# h3 = rand(ComplexF64)
-# h4 = rand(ComplexF64)
-# h5 = rand(ComplexF64)
-# h6 = rand(ComplexF64)
-# h7 = rand(ComplexF64)
-# h8 = rand(ComplexF64)
-
-# h = [h1;h2;h3;h4;h5;h6;h7;h8]
-# H = Hankel{ComplexF64}(h,m,n)
-
-# Y_00 = [
-#         0 1 0 0
-#         1 0 1 0
-#         0 1 0 1
-#         0 0 1 0
-#     ]      
-# Y_11 = [
-#         1 1 0 0 0
-#         1 0 1 0 0
-#         0 1 0 1 0
-#         0 0 1 0 1
-#         0 0 0 1 1
-#     ]
-
-
-                  
-
-# Y_00 * H - H * Y_11 ≈ U*V'
-
-
 
 @testset "auxiliary tests" begin
     # relation trigonemetric transforms and FFTW code
@@ -215,7 +180,22 @@ end
     U, V = LdrMatrices.ldr_generators_hankel_I(H; φ = φ)
     @test Z' * H - H * Z_φ ≈ U * V'
     @test LdrMatrices.cauchyform_hankel_complex(H; φ = φ) ≈ DFT(5)' * Hdense * DFT(4, φ) 
-    
+    Y_00 = [
+        0 1 0 0 0
+        1 0 1 0 0
+        0 1 0 1 0
+        0 0 1 0 1
+        0 0 0 1 0
+    ]      
+    Y_11 = [
+        1 1 0 0
+        1 0 1 0
+        0 1 0 1
+        0 0 1 1
+    ]
+    U, V = LdrMatrices.ldr_generators_hankel_II(H)
+    @test Y_00 * H - H * Y_11 ≈ U*V'
+
     #solver
     u = rand(4)
     v = rand(3)
@@ -254,4 +234,5 @@ end
     @test typeof(T + H) == typeof(H + T) == typeof(TplusH)
     @test H + T == T + H == TplusH
 
+    #
 end
