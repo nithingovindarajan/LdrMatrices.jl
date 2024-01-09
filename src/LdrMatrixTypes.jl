@@ -98,9 +98,33 @@ end
 ##########################
 # Toeplitz-like matrices #
 ##########################
+struct ToeplitzLike{Scalar<:Number} <: AbstractMatrix{Scalar}
+    φ::Scalar
+    U::Matrix{Scalar}
+    V::Matrix{Scalar}
+    m::Int
+    n::Int
+    r::Int
 
-function ldr_generators_toeplitz_I(A::Toeplitz; φ = -1)
-    # associated with lrd eq: Z * A -  A * Z_φ = UV'
+    function ToeplitzLike{Scalar}(φ, U, V) where {Scalar<:Number}
+        if size(U, 2) != size(V, 2)
+            throw(DomainError("size(U,2) != size(V,2)"))
+        end
+        m = size(U, 1) 
+        n = size(V, 1) 
+        r = size(U, 2)
+
+        new{Scalar}(
+            convert(Scalar, φ),
+            convert(Matrix{Scalar}, U),
+            convert(Matrix{Scalar}, V),
+            m,
+            n,
+            r,
+        )
+    end
+end
+function ToeplitzLike{Scalar}(A::Toeplitz; φ::Number = -1) where {Scalar<:Number}
     U = [
         1 A.coeffs[A.m]
         zeros(A.m - 1) A.coeffs[1:A.m-1]-φ*A.coeffs[A.n+1:end]
@@ -109,8 +133,49 @@ function ldr_generators_toeplitz_I(A::Toeplitz; φ = -1)
         conj(A.coeffs[end:-1:A.m+1] - A.coeffs[A.n-1:-1:1]) zeros(A.n - 1)
         conj(-φ * A.coeffs[A.n]) 1
     ]
-    return U, V
+    return ToeplitzLike{Scalar}(φ, U, V)
 end
+Base.:size(A::ToeplitzLike) = (A.m, A.n)
+function Base.:getindex(A::ToeplitzLike, i::Int, j::Int)
+# TODO
+# φ = rand(ComplexF64); φ = φ / abs(φ)
+# Z = [
+#     0 0 0 0 1
+#     1 0 0 0 0
+#     0 1 0 0 0
+#     0 0 1 0 0
+#     0 0 0 1 0
+# ]
+# Z_φ =  [
+#     0 0 0 0 φ
+#     1 0 0 0 0
+#     0 1 0 0 0
+#     0 0 1 0 0
+#     0 0 0 1 0
+# ]
+# u = rand(ComplexF64, 5)
+# v = rand(ComplexF64, 5)
+
+# C1 = [u[1] u[5] u[4] u[3] u[2]
+#       u[2] u[1] u[5] u[4] u[3]
+#       u[3] u[2] u[1] u[5] u[4]
+#       u[4] u[3] u[2] u[1] u[5]
+#       u[5] u[4] u[3] u[2] u[1]]
+
+# C2 = (1-φ) \ [conj(v[5]) φ*conj(v[1]) φ*conj(v[2]) φ*conj(v[3]) φ*conj(v[4])
+#              conj(v[4]) conj(v[5]) φ*conj(v[1]) φ*conj(v[2]) φ*conj(v[3])
+#              conj(v[3]) conj(v[4]) conj(v[5]) φ*conj(v[1]) φ*conj(v[2])
+#              conj(v[2]) conj(v[3]) conj(v[4]) conj(v[5]) φ*conj(v[1])
+#              conj(v[1]) conj(v[2]) conj(v[3]) conj(v[4]) conj(v[5])]
+# Tlike = C1*C2
+    
+# Tliketest = reshape(( kron(Matrix(I,5,5),Z)-  kron(transpose(Z_φ), Matrix(I,5,5))) \ (u * v')[:] ,(5,5))
+# Z * Tlike - Tlike * Z_φ ≈ u * v'
+    return 0
+end
+
+
+
 
 
 
@@ -150,9 +215,33 @@ end
 ########################
 # Hankel-like matrices #
 ########################
+struct HankelLike{Scalar<:Number} <: AbstractMatrix{Scalar}
+    φ::Scalar
+    U::Matrix{Scalar}
+    V::Matrix{Scalar}
+    m::Int
+    n::Int
+    r::Int
 
-function ldr_generators_hankel_I(A::Hankel; φ = -1)
-    # associated with lrd eq: Z' * A -  A * Z_φ = UV'
+    function HankelLike{Scalar}(φ, U, V) where {Scalar<:Number}
+        if size(U, 2) != size(V, 2)
+            throw(DomainError("size(U,2) != size(V,2)"))
+        end
+        m = size(U, 1) 
+        n = size(V, 1) 
+        r = size(U, 2)
+
+        new{Scalar}(
+            convert(Scalar, φ),
+            convert(Matrix{Scalar}, U),
+            convert(Matrix{Scalar}, V),
+            m,
+            n,
+            r,
+        )
+    end
+end
+function HankelLike{Scalar}(A::Hankel; φ::Number = -1) where {Scalar<:Number}
     U = [
         A.coeffs[A.n+1:end]-φ*A.coeffs[1:A.m-1] zeros(A.m - 1)
         -φ*A.coeffs[A.m] 1
@@ -161,8 +250,14 @@ function ldr_generators_hankel_I(A::Hankel; φ = -1)
         zeros(A.n - 1) conj(A.coeffs[1:A.n-1] - A.coeffs[A.m+1:end])
         1 conj(A.coeffs[A.n])
     ]
-    return U, V
+    return HankelLike{Scalar}(φ, U, V)
 end
+Base.:size(A::ToeplitzLike) = (A.m, A.n)
+function Base.:getindex(A::ToeplitzLike, i::Int, j::Int)
+# TODO
+    return 0
+end
+
 
 
 #################################
@@ -229,9 +324,32 @@ end
 #################################
 # Toeplitz-Hankel-like matrices #
 #################################
+struct ToeplitzPlusHankelLike{Scalar<:Number} <: AbstractMatrix{Scalar}
+    U::Matrix{Scalar}
+    V::Matrix{Scalar}
+    m::Int
+    n::Int
+    r::Int
 
-function ldr_generators_toeplitz_II(A::Toeplitz)
-    # associated with lrd eq: Y00 * A -  A * Y11 = UV'
+    function ToeplitzPlusHankelLike{Scalar}(U, V) where {Scalar<:Number}
+        if size(U, 2) != size(V, 2)
+            throw(DomainError("size(U,2) != size(V,2)"))
+        end
+        m = size(U, 1) 
+        n = size(V, 1) 
+        r = size(U, 2)
+
+        new{Scalar}(
+            convert(Matrix{Scalar}, U),
+            convert(Matrix{Scalar}, V),
+            m,
+            n,
+            r,
+        )
+    end
+end
+function ToeplitzPlusHankelLike{Scalar}(A::Toeplitz; φ::Number = -1) where {Scalar<:Number}
+# associated with lrd eq: Y00 * A -  A * Y11 = UV'
     # U
     u1 = [
         1
@@ -268,11 +386,9 @@ function ldr_generators_toeplitz_II(A::Toeplitz)
         zeros(A.n - 1)
     ]
     V = [v1 v2 v3 v4]
-    return U, V
+    return ToeplitzPlusHankelLike{Scalar}(U, V)
 end
-
-
-function ldr_generators_hankel_II(A::Hankel)
+function ToeplitzPlusHankelLike{Scalar}(A::Hankel; φ::Number = -1) where {Scalar<:Number}
     # U
     u1 = [
         1
@@ -309,10 +425,9 @@ function ldr_generators_hankel_II(A::Hankel)
         zeros(A.n - 1)
     ]
     V = [v1 v2 v3 v4]
-    return U, V
+    return ToeplitzPlusHankelLike{Scalar}(U, V)
 end
-
-function ldr_generators_toeplitzplushankel(A::ToeplitzPlusHankel)
+function ToeplitzPlusHankelLike{Scalar}(A::ToeplitzPlusHankel; φ::Number = -1) where {Scalar<:Number}
     # U
     u1 = [
         1
@@ -365,6 +480,10 @@ function ldr_generators_toeplitzplushankel(A::ToeplitzPlusHankel)
         zeros(A.n - 1)
     ]
     V = [v1 v2 v3 v4]
-
-    return U, V
+    return ToeplitzPlusHankelLike{Scalar}(U, V)
+end
+Base.:size(A::ToeplitzPlusHankelLike) = (A.m, A.n)
+function Base.:getindex(A::ToeplitzPlusHankelLike, i::Int, j::Int)
+# TODO
+    return 0
 end

@@ -242,10 +242,10 @@ function fast_ge_solve(A::CauchyLike, b::Vector)
 end
 
 function cauchyform_toeplitz_complex(A::Toeplitz; φ = -1.0 + 0.0im)
-    U, V = ldr_generators_toeplitz_I(A; φ = φ)
-    U = sqrt(A.m) .* ifft(U, 1)
-    V = sqrt(A.n) .* ifft(Diagonal(D(A.n, φ))' * V, 1)
-    return CauchyLike{Complex}(Ω(A.m), Ω(A.n, φ), U, V)
+    Alike = ToeplitzLike{eltype(A)}(A; φ = φ)
+    U = sqrt(Alike.m) .* ifft(Alike.U, 1)
+    V = sqrt(Alike.n) .* ifft(Diagonal(D(Alike.n, φ))' * Alike.V, 1)
+    return CauchyLike{ComplexF64}(Ω(Alike.m), Ω(Alike.n, φ), U, V)
 end
 
 function fast_ge_solve(A::Toeplitz, b::Vector)
@@ -268,10 +268,10 @@ function fast_ge_solve(A::Toeplitz, b::Vector)
 end
 
 function cauchyform_hankel_complex(A::Hankel; φ = -1.0 + 0.0im)
-    U, V = ldr_generators_hankel_I(A; φ = φ)
-    Uhat = sqrt(A.m) .* ifft(U, 1)
-    Vhat = sqrt(A.n) .* ifft(Diagonal(D(A.n, φ))' * V, 1)
-    return CauchyLike{Complex}(conj(Ω(A.m)), Ω(A.n, φ), Uhat, Vhat)
+    Alike = HankelLike{eltype(A)}(A; φ = φ)
+    Uhat = sqrt(Alike.m) .* ifft(Alike.U, 1)
+    Vhat = sqrt(Alike.n) .* ifft(Diagonal(D(Alike.n, φ))' * Alike.V, 1)
+    return CauchyLike{Complex}(conj(Ω(Alike.m)), Ω(Alike.n, φ), Uhat, Vhat)
 end
 
 function fast_ge_solve(A::Hankel, b::Vector)

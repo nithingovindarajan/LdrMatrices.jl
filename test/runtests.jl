@@ -18,7 +18,6 @@ function DCT_II(n)
     return A
 end
 
-
 @testset "auxiliary tests" begin
     # relation trigonemetric transforms and FFTW code
     n = 10
@@ -121,8 +120,8 @@ end
         0 0 1 0 0
         0 0 0 1 0
     ]
-    U, V = LdrMatrices.ldr_generators_toeplitz_I(T; φ = φ)
-    @test Z * T - T * Z_φ ≈ U * V' # check for nonsquare as well! 
+    Tlike = ToeplitzLike{eltype(T)}(T; φ = φ)
+    @test Z * T - T * Z_φ ≈ Tlike.U * Tlike.V' # check for nonsquare as well! 
     @test LdrMatrices.cauchyform_toeplitz_complex(T; φ = φ) ≈ DFT(4)' * Tdense * DFT(5, φ)
     Y_00 = [
         0 1 0 0
@@ -137,8 +136,8 @@ end
         0 0 1 0 1
         0 0 0 1 1
     ]
-    U, V = LdrMatrices.ldr_generators_toeplitz_II(T)
-    @test Y_00 * T - T * Y_11 ≈ U*V'
+    Tlike= ToeplitzPlusHankelLike{eltype(T)}(T)
+    @test Y_00 * T - T * Y_11 ≈ Tlike.U*Tlike.V'
 
     #solver
     u = rand(4)
@@ -177,8 +176,8 @@ end
         0 1 0 0
         0 0 1 0
     ]
-    U, V = LdrMatrices.ldr_generators_hankel_I(H; φ = φ)
-    @test Z' * H - H * Z_φ ≈ U * V'
+    Hlike = HankelLike{eltype(H)}(H; φ = φ)
+    @test Z' * H - H * Z_φ ≈ Hlike.U * Hlike.V'
     @test LdrMatrices.cauchyform_hankel_complex(H; φ = φ) ≈ DFT(5)' * Hdense * DFT(4, φ) 
     Y_00 = [
         0 1 0 0 0
@@ -193,8 +192,8 @@ end
         0 1 0 1
         0 0 1 1
     ]
-    U, V = LdrMatrices.ldr_generators_hankel_II(H)
-    @test Y_00 * H - H * Y_11 ≈ U*V'
+    Hlike = ToeplitzPlusHankelLike{eltype(H)}(H)
+    @test Y_00 * H - H * Y_11 ≈ Hlike.U*Hlike.V'
 
     #solver
     u = rand(4)
