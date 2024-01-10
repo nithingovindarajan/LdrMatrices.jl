@@ -1,6 +1,60 @@
-#############################################################################
-# Gohberg, Kailath and Olshevsky (Schur) Algorithm for Cauchy-like matrices #
-#############################################################################
+########################
+# Cauchy-Like matrices #
+########################
+
+struct CauchyLike{Scalar<:Number} <: AbstractMatrix{Scalar}
+    omega::Vector{Scalar}
+    lambda::Vector{Scalar}
+    U::Matrix{Scalar}
+    V::Matrix{Scalar}
+    m::Int
+    n::Int
+    r::Int
+
+    function CauchyLike{Scalar}(omega, lambda, U, V) where {Scalar<:Number}
+        if size(U, 2) != size(V, 2)
+            throw(DomainError("size(U,2) != size(V,2)"))
+        end
+        if size(U, 1) != length(omega)
+            throw(DomainError("size(U,1) != length(omega)"))
+        end
+        if size(V, 1) != length(lambda)
+            throw(DomainError("size(V,1) != length(lambda)"))
+        end
+        m = length(omega)
+        n = length(lambda)
+        r = size(U, 2)
+
+        new{Scalar}(
+            convert(Vector{Scalar}, omega),
+            convert(Vector{Scalar}, lambda),
+            convert(Matrix{Scalar}, U),
+            convert(Matrix{Scalar}, V),
+            m,
+            n,
+            r,
+        )
+    end
+
+end
+function CauchyLike{Scalar}(omega, lambda) where {Scalar<:Number}
+    return CauchyLike{Scalar}(
+        omega,
+        lambda,
+        ones(length(omega), 1),
+        ones(length(lambda), 1),
+    )
+end
+Base.:size(A::CauchyLike) = (A.m, A.n)
+Base.:getindex(A::CauchyLike, i::Int, j::Int) =
+    @views dot(A.V[j, :], A.U[i, :]) / (A.omega[i] - A.lambda[j])
+Base.:Matrix(A::CauchyLike) = (A.U * A.V') ./ (A.omega .- transpose(A.lambda))
+
+
+
+########################
+# supporting functions #
+########################
 
 function normalize(U, V)
     F = qr(U)
@@ -8,6 +62,11 @@ function normalize(U, V)
     Vnorm = V * F.R'
     return Unorm, Vnorm
 end
+
+
+####################
+# LU factorization #
+####################
 
 #TODO allow for nonsquare
 function fast_ge_LU(A::CauchyLike; row_pivot = true, column_pivot = true, TOL = 1E-15)
@@ -109,6 +168,9 @@ function fast_ge_LU(A::CauchyLike; row_pivot = true, column_pivot = true, TOL = 
 
 end
 
+#################
+# triangularize #
+#################
 
 function fast_ge_triangularize(
     A::CauchyLike,
@@ -219,9 +281,19 @@ function fast_ge_triangularize(
     return Upper, Π_2, btilde
 end
 
+
+###########
+# inverse #
+###########
+
+
 function fast_ge_inverse(A::CauchyLike, row_pivot = true, column_pivot = true)
     #TODO 
 end
+
+#########
+# solve #
+#########
 
 function fast_ge_solve(A::CauchyLike, b::Vector)
 
@@ -238,56 +310,5 @@ function fast_ge_solve(A::CauchyLike, b::Vector)
         error("underdetermined not yet supported")
     end
 
-    return x
-end
-
-function cauchyform_toeplitz_complex(A::Toeplitz; φ = -1.0 + 0.0im)
-    Alike = ToeplitzLike{eltype(A)}(A; φ = φ)
-    U = sqrt(Alike.m) .* ifft(Alike.U, 1)
-    V = sqrt(Alike.n) .* ifft(Diagonal(D(Alike.n, φ))' * Alike.V, 1)
-    return CauchyLike{ComplexF64}(Ω(Alike.m), Ω(Alike.n, φ), U, V)
-end
-
-function fast_ge_solve(A::Toeplitz, b::Vector)
-
-    if size(A, 1) == size(A, 2)
-        # Solve Cauchy system
-        Ahat = cauchyform_toeplitz_complex(A)
-        bhat = sqrt(A.n) * ifft(b)
-        xhat = fast_ge_solve(Ahat, bhat)
-
-        # retrieve solution of original system
-        x = Diagonal(D(A.n, -1.0 + 0.0im)) * fft(xhat) / sqrt(A.n)
-    elseif size(A, 1) > size(A, 2)
-        error("overdetermined not yet supported")
-    else
-        error("underdetermined not yet supported")
-    end
-
-    return x
-end
-
-function cauchyform_hankel_complex(A::Hankel; φ = -1.0 + 0.0im)
-    Alike = HankelLike{eltype(A)}(A; φ = φ)
-    Uhat = sqrt(Alike.m) .* ifft(Alike.U, 1)
-    Vhat = sqrt(Alike.n) .* ifft(Diagonal(D(Alike.n, φ))' * Alike.V, 1)
-    return CauchyLike{Complex}(conj(Ω(Alike.m)), Ω(Alike.n, φ), Uhat, Vhat)
-end
-
-function fast_ge_solve(A::Hankel, b::Vector)
-    if size(A, 1) == size(A, 2)
-        # Solve Cauchy system
-        Ahat = cauchyform_hankel_complex(A)
-        bhat = sqrt(A.n) * ifft(b)
-        xhat = fast_ge_solve(Ahat, bhat)
-
-        # retrieve solution of original system
-        x = Diagonal(D(A.n, -1.0 + 0.0im)) * fft(xhat) / sqrt(A.n)
-
-    elseif size(A, 1) > size(A, 2)
-        error("overdetermined not yet supported")
-    else
-        error("underdetermined not yet supported")
-    end
     return x
 end

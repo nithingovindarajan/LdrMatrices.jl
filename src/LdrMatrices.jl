@@ -16,8 +16,10 @@ using LinearAlgebra
 using FFTW
 
 
-
-include("LdrMatrixTypes.jl")
-include("algorithms.jl")
+include("definitions.jl")
+include("CauchyLike.jl")
+include("ToeplitzLike.jl")
+include("HankelLike.jl")
+include("ToeplitzPlusHankelLike.jl")
 
 end
